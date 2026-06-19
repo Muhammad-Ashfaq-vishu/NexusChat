@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NexusChat — AI Assistant</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- Toast container -->
+  <div id="toast-container" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="settings-title">Settings</h2>
+        <button class="icon-btn" id="close-settings-btn" aria-label="Close settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label for="api-key-input">OpenRouter API Key</label>
+          <p class="setting-description">Your key is stored only in your browser's localStorage and never sent anywhere except OpenRouter.</p>
+          <div class="input-row">
+            <input type="password" id="api-key-input" placeholder="sk-or-..." autocomplete="off" spellcheck="false" />
+            <button class="btn btn-secondary" id="toggle-key-visibility" aria-label="Toggle key visibility">Show</button>
+          </div>
+          <!-- SECURITY NOTE: Storing API keys in the frontend (localStorage) is insecure.
+               Anyone with access to the browser can extract the key via DevTools.
+               In production, use a backend proxy that holds the API key server-side.
+               The frontend should authenticate to YOUR backend, not to OpenRouter directly.
+               Best practice: OAuth or session-based auth → backend → OpenRouter API. -->
+        </div>
+
+        <div class="setting-group">
+          <label for="model-select">AI Model</label>
+          <select id="model-select">
+            <option value="openai/gpt-4o-mini">GPT-4o Mini (Fast &amp; Affordable)</option>
+            <option value="openai/gpt-4o">GPT-4o (Most Capable)</option>
+            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="anthropic/claude-3-haiku">Claude 3 Haiku (Fast)</option>
+            <option value="google/gemini-pro-1.5">Gemini Pro 1.5</option>
+            <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="system-prompt-input">System Prompt</label>
+          <textarea id="system-prompt-input" rows="4" placeholder="You are a helpful AI assistant..."></textarea>
+        </div>
+
+        <div class="setting-group">
+          <label for="temp-slider">Temperature: <span id="temp-value">0.7</span></label>
+          <input type="range" id="temp-slider" min="0" max="2" step="0.1" value="0.7" />
+        </div>
+
+        <div class="setting-group">
+          <label for="max-tokens-input">Max Tokens</label>
+          <input type="number" id="max-tokens-input" min="100" max="4096" value="1024" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancel-settings-btn">Cancel</button>
+        <button class="btn btn-primary" id="save-settings-btn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div class="app" id="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar" aria-label="Conversations">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="logo-text">NexusChat</span>
+        </div>
+        <button class="icon-btn sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Collapse sidebar" title="Collapse sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 19l-7-7 7-7"/><path d="M19 19l-7-7 7-7"/></svg>
+        </button>
+      </div>
+
+      <button class="btn btn-primary new-chat-btn" id="new-chat-btn" aria-label="Start new chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>New Chat</span>
+      </button>
+
+      <nav class="conversation-nav" aria-label="Chat history">
+        <div class="conversation-section-label">Recent</div>
+        <ul class="conversation-list" id="conversation-list" role="list">
+          <!-- Populated by JS -->
+        </ul>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="stats-panel" aria-label="Chat statistics">
+          <div class="stat-item">
+            <span class="stat-value" id="stat-total">0</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-user">0</span>
+            <span class="stat-label">You</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value" id="stat-ai">0</span>
+            <span class="stat-label">AI</span>
+          </div>
+        </div>
+        <div class="sidebar-actions">
+          <button class="icon-btn" id="theme-toggle-btn" aria-label="Toggle dark/light mode" title="Toggle theme">
+            <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </button>
+          <button class="icon-btn" id="export-txt-btn" aria-label="Export chat as TXT" title="Export as TXT">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          </button>
+          <button class="icon-btn" id="export-json-btn" aria-label="Export chat as JSON" title="Export as JSON">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </button>
+          <button class="icon-btn" id="settings-btn" aria-label="Open settings" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+
+    <!-- Main content area -->
+    <main class="main" id="main">
+
+      <!-- Top bar -->
+      <header class="topbar">
+        <button class="icon-btn" id="sidebar-toggle-btn" aria-label="Toggle sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="topbar-center">
+          <span class="current-model-badge" id="current-model-badge">GPT-4o Mini</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn danger" id="clear-chat-btn" aria-label="Clear current chat" title="Clear chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Chat messages area -->
+      <section class="chat-area" id="chat-area" aria-label="Chat messages" aria-live="polite">
+
+        <!-- Welcome screen shown when no messages -->
+        <div class="welcome-screen" id="welcome-screen">
+          <div class="welcome-logo">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="url(#g1)" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="url(#g1)" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="url(#g1)" stroke-width="1.5" stroke-linejoin="round"/><defs><linearGradient id="g1" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse"><stop stop-color="#818cf8"/><stop offset="1" stop-color="#c084fc"/></linearGradient></defs></svg>
+          </div>
+          <h1 class="welcome-title">Welcome to NexusChat</h1>
+          <p class="welcome-subtitle">Your AI assistant, powered by OpenRouter. Ask anything.</p>
+          <div class="suggestion-grid">
+            <button class="suggestion-card" data-prompt="Explain quantum computing in simple terms">
+              <span class="suggestion-icon">⚛️</span>
+              <span>Explain quantum computing simply</span>
+            </button>
+            <button class="suggestion-card" data-prompt="Write a Python function to parse JSON safely">
+              <span class="suggestion-icon">🐍</span>
+              <span>Write a Python JSON parser</span>
+            </button>
+            <button class="suggestion-card" data-prompt="What are the best practices for REST API design?">
+              <span class="suggestion-icon">🔌</span>
+              <span>REST API best practices</span>
+            </button>
+            <button class="suggestion-card" data-prompt="Help me write a professional email declining a meeting">
+              <span class="suggestion-icon">✉️</span>
+              <span>Draft a polite meeting decline</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Messages container -->
+        <div class="messages-container" id="messages-container" role="log" aria-label="Chat messages"></div>
+
+        <!-- Typing indicator -->
+        <div class="typing-indicator" id="typing-indicator" aria-label="AI is typing" hidden>
+          <div class="typing-avatar">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="typing-dots">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Input area -->
+      <footer class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            id="message-input"
+            class="message-input"
+            placeholder="Message NexusChat… (Enter to send, Shift+Enter for newline)"
+            rows="1"
+            maxlength="8000"
+            aria-label="Message input"
+            aria-multiline="true"
+          ></textarea>
+          <div class="input-toolbar">
+            <span class="char-counter" id="char-counter" aria-live="polite">0 / 8000</span>
+            <button class="send-btn" id="send-btn" aria-label="Send message" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+        <p class="input-disclaimer">AI can make mistakes. Verify important information.</p>
+      </footer>
+
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
